@@ -2,16 +2,17 @@
 #define PINS_H
 
 //Encoder Pins
-#define BUTTON D9
-#define ENCODER_B D8
-#define ENCODER_A D7
+#define BUTTON D0
+#define ENCODER_B D1
+#define ENCODER_A D2
 
-//Output Pins
-#define LED_0 D0
-#define LED_1 D1
-#define LED_2 D2
-#define LED_3 D3
-constexpr int LEDs[] = {LED_0, LED_1, LED_2, LED_3};
+//Display Pins
+#define TFT_RES D3
+#define TFT_DC D4
+#define TFT_SDA D10
+#define TFT_SCL D8
+#define TFT_CS D7
+#define TFT_BL D6
 
 
 #endif
