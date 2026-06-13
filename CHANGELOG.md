@@ -7,7 +7,7 @@
 | `platformio.ini` | Modified | Removed TFT_eSPI, added Adafruit GFX |
 | `include/tft_setup.h` | Orphaned | TFT_eSPI config (no longer used, kept for reference) |
 | `src/display/display.h` | **New** | Custom ST7789 driver class (inherits Adafruit_GFX) |
-| `src/display/display.cpp` | **New** | Driver implementation (SPI, init, pixel/rect drawing) |
+| `src/display/display.cpp` | **New / Modified** | Driver implementation (SPI, init, pixel/rect drawing); added power/gamma init, fixed landscape offsets |
 | `src/ui/ui.h` | Cleared | Was LVGL UI (deferred) |
 | `src/ui/ui.cpp` | Cleared | Was LVGL UI (deferred) |
 | `src/main.cpp` | Rewritten | Simple test: fill + text |
@@ -32,16 +32,20 @@ So `D7` is **GPIO20**, not GPIO7. This caused all early pin definitions to be wr
 
 Backlight turns ON with `digitalWrite(D6, LOW)` (GPIO21). Set `TFT_BACKLIGHT_ON=0`.
 
-### 3. CGRAM Offsets (Portrait)
+### 3. CGRAM Offsets
 
 Calibrated by sweeping row/col positions until the image filled the screen edge-to-edge:
 
-| Orientation | colstart | rowstart |
-|---|---|---|
-| Portrait (rot=0) | 82 | 18 |
-| Landscape (rot=1) | 20 | 0 (rough — not yet calibrated) |
+| Orientation | MADCTL | colstart | rowstart |
+|---|---|---|---|
+| Portrait (rot=0) | 0x00 | 82 | 18 |
+| Landscape (rot=1) | 0x60 (MV \| MX) | 18 | 82 |
+| Portrait 180° (rot=2) | 0xC0 (MX \| MY) | 0 (guessed) | 80 (guessed) |
+| Landscape 180° (rot=3) | 0xA0 (MY \| MV) | 0 (guessed) | 0 (guessed) |
 
 These are set in `display.cpp` via `_colOff` / `_rowOff`.
+
+With MV=1: CASET maps to physical rows, RASET maps to physical columns. For a 240×320 panel, landscape centering is `(320-284)/2 = 18` rows and `(240-76)/2 = 82` columns.
 
 ### 4. TFT_eSPI Incompatibility
 
@@ -56,27 +60,30 @@ The same init sequence works fine when done manually with `digitalWrite()` and `
 The `Display` class inherits `Adafruit_GFX` and implements the display backend with:
 - `digitalWrite()` for CS/DC control (no direct register access)
 - `SPI.transfer()` for pixel data
-- ST7789 init sequence (same as the manual test that worked)
-- Rotation 0 supports calibrated CGRAM offsets (col=82, row=18)
-- Rotation 1-3 use guessed offsets (need calibration)
+- Full ST7789 init sequence including power/gamma registers
+- Rotation 0 (portrait): calibrated offsets (col=82, row=18)
+- Rotation 1 (landscape): calibrated offsets (col=18, row=82)
+- Rotations 2-3: guessed offsets (need calibration)
 
 Available API:
-- `begin()` — init pins, SPI, and display
-- `setRotation(r)` — 0-3
+- `begin()` — init pins, SPI, and display (calls `setRotation(0)` at end to sync state)
+- `setRotation(r)` — 0-3 (MADCTL wrapped in SPI transactions)
 - `fillScreen(color)`, `fillRect(x,y,w,h,color)`
 - `drawPixel(x,y,color)`
 - All `Adafruit_GFX` methods: `setCursor`, `print`, `println`, `drawLine`, `drawCircle`, etc.
 
 ---
 
+## Status
+
+- **Rotation 1 (landscape)**: Working — white background, black text, properly centered on 240×320 panel.
+- **Known issues (all fixed)**: `setRotation()` now wraps MADCTL writes in SPI transactions. `begin()` includes full ST7789 power/gamma init sequence and calls `setRotation(0)` to sync software state.
+
 ## Next Steps
 
-### Known Issue — Rotation not working
-The `setRotation()` command sends MADCTL via `cmd()` which needs an active SPI transaction. Currently `setRotation` doesn't call `SPI.beginTransaction()` before sending. Fix: wrap the MADCTL write in `SPI.beginTransaction()` / `SPI.endTransaction()`.
-
 ### Short-term
-1. **Calibrate rotation 1 (landscape) offsets** — the current `_colOff=20, _rowOff=0` need adjustment. Do an offset sweep similar to what we did for portrait.
-2. **Verify rotation 2 and 3** — offsets may need calibration for those too.
+1. **Calibrate rotation 2 and 3** — offsets are currently guessed and may be incorrect.
+2. **Improve drawPixel performance** — each pixel currently opens/closes an SPI transaction; batching would be faster.
 
 ### Medium-term
 3. **Add LVGL** — once the display driver is stable, integrate LVGL with a custom flush callback using our `Display` class.

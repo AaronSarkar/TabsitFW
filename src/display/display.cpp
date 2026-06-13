@@ -52,15 +52,27 @@ void Display::begin() {
   SPI.begin(PIN_SCLK, PIN_MISO, PIN_MOSI, -1);
   SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
 
-  cmd(0x01); delay(120);
-  cmd(0x11); delay(120);
-  cmd(0x36); data8(0x00);
+  cmd(0x01); delay(150);
+  cmd(0x11); delay(150);
   cmd(0x3A); data8(0x55);
-  cmd(0x20);
+  cmd(0xB2); data8(0x0C); data8(0x0C); data8(0x00); data8(0x33); data8(0x33);
+  cmd(0xB7); data8(0x35);
+  cmd(0xBB); data8(0x19);
+  cmd(0xC0); data8(0x2C);
+  cmd(0xC2); data8(0x01);
+  cmd(0xC3); data8(0x12);
+  cmd(0xC4); data8(0x20);
+  cmd(0xC6); data8(0x0F);
+  cmd(0xD0); data8(0xA4); data8(0xA1);
+  cmd(0xE0); data8(0xD0); data8(0x04); data8(0x0D); data8(0x11); data8(0x13); data8(0x2B); data8(0x3F); data8(0x54); data8(0x4C); data8(0x18); data8(0x0D); data8(0x0B); data8(0x1F); data8(0x23);
+  cmd(0xE1); data8(0xD0); data8(0x04); data8(0x0C); data8(0x11); data8(0x13); data8(0x2C); data8(0x3F); data8(0x44); data8(0x51); data8(0x2F); data8(0x1F); data8(0x1F); data8(0x20); data8(0x23);
+  cmd(0x21);
   cmd(0x13); delay(10);
-  cmd(0x29); delay(120);
+  cmd(0x29); delay(150);
 
   SPI.endTransaction();
+
+  setRotation(0);
 }
 
 void Display::setRotation(uint8_t r) {
@@ -74,7 +86,7 @@ void Display::setRotation(uint8_t r) {
       break;
     case 1:
       cmd(0x36); data8(0x60);  // MX | MV
-      _colOff = 20; _rowOff = 0;
+      _colOff = 18; _rowOff = 82;
       _width = 284; _height = 76;
       break;
     case 2:
