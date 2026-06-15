@@ -16,9 +16,18 @@
 #define TFT_MISO    9      // D9 (unused, satisfies SPI)
 
 #define TFT_BACKLIGHT_ON 0  // Active LOW
+
+// CGRAM offsets to center the 76x284 visible area on the 240x320 physical panel
+#define COLSTART 82
+#define ROWSTART 18
 #define TFT_WIDTH    76
 #define TFT_HEIGHT   284
-#define SPI_FREQUENCY   27000000
+#define SPI_FREQUENCY   4000000
 #define SUPPORT_TRANSACTIONS
+
+#define CGRAM_OFFSET
+
+#define LOAD_FONT2
+#define LOAD_FONT4
 
 #define USER_SETUP_LOADED
