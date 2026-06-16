@@ -44,6 +44,15 @@ Implemented complete task display system with LVGL 8.x graphics library and rota
 
 ---
 
+### Cleanup & Details Screen Work (latest)
+
+- **Removed scroll animation code**: Deleted the opacity/fade transition experiments (`scroll_anim_cb`, `startScrollAnimation`, `startEdgeResistanceAnimation`, `setTimeout` timer helpers) and related state. Home-screen scrolling now updates instantly, which is more reliable and less janky.
+- **Removed boot TFT test**: Dropped the "TFT Test" splash/`fillScreen` test from `main.cpp` `setup()` so the device boots straight into the task UI.
+- **Longer example descriptions**: `task.cpp` example tasks now have multi-sentence descriptions to exercise scrolling in the Details Screen.
+- **Details Screen description scrolling (WIP)**: Reworked the Details content area to allow reading long descriptions. Rotation events in `UI_DETAILS` now route to `scrollDescription()` (1:1, no encoder ratio). Tried multiple approaches — manual `lv_obj_set_y`, LVGL native container scrolling (`lv_obj_scroll_by`), removing the flex layout, content-sized label, and disabling elastic/momentum scroll. **Still not working reliably** (see Known Issues).
+
+---
+
 ### Issues Resolved
 
 | # | Symptom | Root Cause | Fix |
@@ -69,18 +78,17 @@ Implemented complete task display system with LVGL 8.x graphics library and rota
 
 ### Known Issues
 
+- **Details Screen description scrolling not working**: Rotating the encoder in the Details Screen does not reliably scroll long descriptions. Observed behavior progressed from "no movement" (flex layout overriding manual `lv_obj_set_y`) to "scrolls slightly then snaps back to top" (layout pass re-clamping scroll on refresh). Current code uses a non-flex container with a content-sized label and elastic/momentum disabled, but scrolling still does not hold. Needs a deeper dive — likely the `forceScreenRefresh()`/`lv_refr_now()` path readjusting scroll, or the label content height not registering a real scrollable range.
 - **Screen Animation Disabled**: LVGL animation system causes crashes when combined with screen refresh. Can be revisited later with a more sophisticated animation implementation.
 - **Debug Output**: Serial debugging enabled at 115200 baud - can be disabled for production
-- **Details Screen**: Implemented but not fully functional (description scrolling not implemented)
 
 ---
 
 ### Remaining Work
 
+- Fix Details Screen description scrolling (deep dive on LVGL scroll vs. refresh interaction)
 - Implement smooth scroll animation without crashes
-- Complete Details Screen functionality
 - Add task completion (double-click)
-- Add description scrolling in Details Screen
 - Implement Bluetooth sync with mobile app
 - Remove serial debugging for production build
 

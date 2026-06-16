@@ -30,128 +30,9 @@ namespace {
   int totalTasks = 0;
   int rotationCount = 0; // Counter for encoder ratio
   constexpr int ENCODER_RATIO = 2; // Skip every other rotation
-  
-  // Animation objects
-  lv_anim_t scroll_anim;
-  bool animating = false;
-  unsigned long animationStartTime = 0;
-  int32_t scroll_offset = 0; // Current scroll offset for animation
-  constexpr unsigned long ANIMATION_DURATION = 300; // Slower 300ms animation
 }
 
 // Forward declarations
-static void setTimeout(void (*callback)(), unsigned long ms);
-static void reset_anim_flag();
-
-// Scroll animation callback for smooth task transitions
-static void scroll_anim_cb(void* var, int32_t value) {
-  scroll_offset = value;
-  
-  // Animate opacity for subtle fade effect (fade to 50% and back)
-  lv_opa_t opacity = (lv_opa_t)value;
-  
-  if (home_content) {
-    lv_obj_set_style_opa(home_content, opacity, 0);
-  }
-  if (home_header) {
-    lv_obj_set_style_opa(home_header, opacity, 0);
-  }
-  if (home_footer) {
-    lv_obj_set_style_opa(home_footer, opacity, 0);
-  }
-}
-
-static void scroll_anim_ready_cb(lv_anim_t* a) {
-  animating = false;
-  scroll_offset = 0;
-  
-  // Reset opacity after animation
-  if (home_content) {
-    lv_obj_set_style_opa(home_content, LV_OPA_COVER, 0);
-  }
-  if (home_header) {
-    lv_obj_set_style_opa(home_header, LV_OPA_COVER, 0);
-  }
-  if (home_footer) {
-    lv_obj_set_style_opa(home_footer, LV_OPA_COVER, 0);
-  }
-}
-
-// Simple animation callback for edge resistance
-static void anim_y_cb(void* var, int32_t v) {
-  lv_obj_set_y((lv_obj_t*)var, v);
-}
-
-static void reset_anim_flag() {
-  animating = false;
-}
-
-static void startEdgeResistanceAnimation(int direction) {
-  if (animating) return;
-  
-  animating = true;
-  animationStartTime = millis();
-  
-  lv_anim_init(&scroll_anim);
-  lv_anim_set_exec_cb(&scroll_anim, anim_y_cb);
-  lv_anim_set_time(&scroll_anim, 120); // 120ms for edge resistance
-  lv_anim_set_path_cb(&scroll_anim, lv_anim_path_ease_out);
-  
-  // Animate screen content slightly in the direction of rotation
-  int32_t displacement = direction > 0 ? -40 : 40; // 40px resistance
-  
-  lv_anim_set_var(&scroll_anim, home_content);
-  lv_anim_set_values(&scroll_anim, 0, displacement);
-  lv_anim_start(&scroll_anim);
-  
-  // Return animation
-  lv_anim_set_values(&scroll_anim, displacement, 0);
-  lv_anim_set_delay(&scroll_anim, 120);
-  lv_anim_start(&scroll_anim);
-  
-  // Reset animating flag after animation completes
-  setTimeout(reset_anim_flag, 240);
-}
-
-static void startScrollAnimation(int direction) {
-  // Don't block - allow new scrolls during animation
-  scroll_offset = 0;
-  
-  lv_anim_init(&scroll_anim);
-  lv_anim_set_exec_cb(&scroll_anim, scroll_anim_cb);
-  lv_anim_set_time(&scroll_anim, ANIMATION_DURATION / 2); // 150ms each phase
-  lv_anim_set_path_cb(&scroll_anim, lv_anim_path_ease_in_out);
-  lv_anim_set_ready_cb(&scroll_anim, scroll_anim_ready_cb);
-  
-  // Fade from full opacity to 70% (subtle effect)
-  lv_anim_set_values(&scroll_anim, LV_OPA_COVER, LV_OPA_70);
-  lv_anim_start(&scroll_anim);
-  
-  // Then fade back to full opacity
-  lv_anim_set_values(&scroll_anim, LV_OPA_70, LV_OPA_COVER);
-  lv_anim_set_delay(&scroll_anim, ANIMATION_DURATION / 2);
-  lv_anim_start(&scroll_anim);
-}
-
-// Simple timeout implementation using LVGL timer
-static lv_timer_t* timeout_timer = nullptr;
-static void (*timeout_callback)() = nullptr;
-
-static void timeout_cb(lv_timer_t* timer) {
-  if (timeout_callback) timeout_callback();
-  lv_timer_del(timer);
-  timeout_timer = nullptr;
-  timeout_callback = nullptr;
-}
-
-static void setTimeout(void (*callback)(), unsigned long ms) {
-  if (timeout_timer) {
-    lv_timer_del(timeout_timer);
-    timeout_timer = nullptr;
-  }
-  timeout_callback = callback;
-  timeout_timer = lv_timer_create(timeout_cb, ms, nullptr);
-}
 
 static const char* getPriorityString(uint8_t priority) {
   switch (priority) {
@@ -271,29 +152,37 @@ static void createDetailsScreen() {
   lv_obj_set_style_text_color(details_back_label, lv_color_hex(0xFFFFFF), 0);
   lv_obj_align(details_back_label, LV_ALIGN_CENTER, 0, 0);
   
-  // Content area (58px height)
+  // Content area (58px height) - scrollable vertically.
+  // NOTE: deliberately NOT a flex layout. Flex re-runs on every refresh and
+  // readjusts/clamps the scroll position, which fought the scrolling. With a
+  // plain container + content-sized label, the scrollable area is stable.
   details_content = lv_obj_create(screen_details);
   lv_obj_set_size(details_content, 284, 58);
   lv_obj_set_pos(details_content, 0, 18);
   lv_obj_set_style_bg_color(details_content, lv_color_hex(0x000000), 0);
   lv_obj_set_style_border_width(details_content, 0, 0);
   lv_obj_set_style_pad_all(details_content, 8, 0);
-  lv_obj_set_layout(details_content, LV_LAYOUT_FLEX);
-  lv_obj_set_flex_flow(details_content, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_flex_align(details_content, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  // Enable crisp vertical scrolling (no elastic bounce / momentum on a knob)
+  lv_obj_set_scroll_dir(details_content, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(details_content, LV_SCROLLBAR_MODE_AUTO);
+  lv_obj_clear_flag(details_content, LV_OBJ_FLAG_SCROLL_ELASTIC);
+  lv_obj_clear_flag(details_content, LV_OBJ_FLAG_SCROLL_MOMENTUM);
   
   details_title_label = lv_label_create(details_content);
   lv_obj_set_style_text_font(details_title_label, LV_FONT_DEFAULT, 0);
   lv_obj_set_style_text_color(details_title_label, lv_color_hex(0xFFFFFF), 0);
   lv_label_set_long_mode(details_title_label, LV_LABEL_LONG_DOT);
   lv_obj_set_width(details_title_label, 268);
+  lv_obj_set_pos(details_title_label, 0, 0);
   
   details_desc_label = lv_label_create(details_content);
   lv_obj_set_style_text_font(details_desc_label, LV_FONT_DEFAULT, 0);
   lv_obj_set_style_text_color(details_desc_label, lv_color_hex(0xCCCCCC), 0);
-  lv_label_set_long_mode(details_desc_label, LV_LABEL_LONG_SCROLL);
+  lv_label_set_long_mode(details_desc_label, LV_LABEL_LONG_WRAP);
   lv_obj_set_width(details_desc_label, 268);
-  lv_obj_set_height(details_desc_label, 30);
+  lv_obj_set_pos(details_desc_label, 0, 18);
+  // Height defaults to LV_SIZE_CONTENT so the label grows to fit the full
+  // wrapped text, giving the container a real scrollable range.
 }
 
 static void updateHomeScreen() {
@@ -352,6 +241,21 @@ static void updateDetailsScreen() {
   
   lv_label_set_text(details_title_label, task->title.c_str());
   lv_label_set_text(details_desc_label, task->description.c_str());
+  
+  // Reset scroll back to the top for the newly opened task
+  lv_obj_scroll_to_y(details_content, 0, LV_ANIM_OFF);
+  
+  Serial.println("Details screen updated");
+}
+
+static void scrollDescription(int direction) {
+  // Scroll the content container by 12px per detent. LVGL clamps the
+  // scroll position to the content bounds automatically, so we don't
+  // need to track/limit the offset ourselves.
+  lv_obj_scroll_by(details_content, 0, -12 * direction, LV_ANIM_OFF);
+  forceScreenRefresh();
+  
+  Serial.printf("Description scroll y: %d\n", lv_obj_get_scroll_y(details_content));
 }
 
 void initUI() {
@@ -455,8 +359,12 @@ void handleInputEvent(InputEvent event) {
         setUIState(UI_HOME);
         break;
       case ROTATE_NEXT:
+        Serial.println("ROTATE_NEXT in details - scroll down");
+        scrollDescription(1);
+        break;
       case ROTATE_PREV:
-        Serial.println("ROTATE in details");
+        Serial.println("ROTATE_PREV in details - scroll up");
+        scrollDescription(-1);
         break;
       default:
         Serial.printf("Unknown event in details: %d\n", event);

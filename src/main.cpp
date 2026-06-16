@@ -31,14 +31,6 @@ void setup() {
   int h = tft.height();
   Serial.printf("Display: %dx%d\n", w, h);
 
-  // Test TFT directly to see if it works
-  Serial.println("Testing TFT directly...");
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString("TFT Test", 10, 10, 2);
-  delay(2000); // Show test for 2 seconds
-  Serial.println("TFT test complete");
-
   // Initialize LVGL with TFT_eSPI
   initLvglDisplay(&tft);
   Serial.println("LVGL initialized");
