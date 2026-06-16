@@ -1,0 +1,61 @@
+# 001_device_state_machine.md
+
+# Device State Machine
+
+BOOT
+↓
+INITIALIZING
+↓
+READY
+
+READY:
+
+* show tasks
+* accept input
+
+READY
+→ DISCONNECTED
+
+DISCONNECTED
+→ RECONNECTING
+
+RECONNECTING
+→ READY
+
+READY
+→ SLEEP
+
+SLEEP
+→ WAKE
+
+ERROR
+→ RECOVERY
+
+---
+
+# Screen States
+
+HOME
+→ DETAILS
+
+DETAILS
+→ HOME
+
+---
+
+# Sync States
+
+IDLE
+→ RECEIVING
+
+RECEIVING
+→ APPLY
+
+APPLY
+→ SAVE
+
+SAVE
+→ COMPLETE
+
+COMPLETE
+→ IDLE
