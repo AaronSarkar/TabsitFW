@@ -4,7 +4,89 @@ All notable changes to this project.
 
 ---
 
-## v0_display — TFT_eSPI Migration
+## v0_display — LVGL UI with Rotary Encoder Input
+
+### Overview
+
+Implemented complete task display system with LVGL 8.x graphics library and rotary encoder input manager. The system displays tasks on a 284×76 ST7789 display with smooth scrolling navigation.
+
+---
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `platformio.ini` | Added `lvgl @ ^8.4.0` library; added `-DLV_CONF_INCLUDE_SIMPLE` to build_flags |
+| `include/lv_conf.h` | **New** — LVGL 8.x configuration with 284×76 resolution, RGB565 color format, 60FPS timer |
+| `src/lv_conf.h` | **New** — LVGL configuration in src directory for proper include path |
+| `src/display/lvgl_display.h` | **New** — LVGL display driver interface with TFT_eSPI integration |
+| `src/display/lvgl_display.cpp` | **New** — LVGL display driver implementation with full-screen buffer (21584 pixels), flush callback, timer handler |
+| `src/config/pins.h` | Fixed GPIO pin configuration (ENCODER_A=5, ENCODER_B=4, BUTTON=3, BL=21) - changed from Arduino D-pins to actual ESP32-C3 GPIO numbers |
+| `src/input/encoder.h` | **New** — Input manager interface with event queue, InputEvent enum, InputLock states |
+| `src/input/encoder.cpp` | **New** — Rotary encoder input manager with debounce, click detection (single/double/long-press), event queue system |
+| `src/models/task.h` | Updated to match spec with String fields, Priority enum (PRIORITY_LOW/MEDIUM/HIGH), additional fields |
+| `src/models/task.cpp` | Updated with example tasks matching spec, proper Priority enum values |
+| `src/ui/ui.h` | **New** — UI interface with UIState enum, screen management functions |
+| `src/ui/ui.cpp` | **New** — Complete UI implementation with Home Screen (header/content/footer), Details Screen, task scrolling, screen refresh, force refresh mechanism |
+| `src/main.cpp` | Integrated LVGL display, input manager, and UI; added TFT direct test; removed Adafruit GFX dependency |
+
+---
+
+### Features Implemented
+
+- **LVGL 8.x Graphics Library**: Full integration with TFT_eSPI driver for hardware-accelerated rendering
+- **Rotary Encoder Input**: Complete input manager with event queue supporting rotation detection, single/double/long-click detection, event debouncing
+- **Home Screen UI**: Task card layout with header (priority + position), content (task title), footer (due date)
+- **Task Scrolling**: 2:1 encoder ratio for smooth navigation
+- **Task Wrapping**: Seamless navigation from last to first task and vice versa
+- **Screen Refresh**: Force refresh mechanism using lv_refr_now() and object invalidation
+- **Serial Debugging**: Comprehensive debug output for input events and UI updates
+
+---
+
+### Issues Resolved
+
+| # | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| 1 | No display updates despite input detection | LVGL flush callback not being called | Added lv_refr_now() and object invalidation |
+| 2 | Encoder counting twice per rotation | No ratio implementation | Added ENCODER_RATIO=2 in UI layer |
+| 3 | Screen not changing on scroll | LVGL timer handler not called during init | Added forced LVGL refresh calls in setup() |
+| 4 | Input detection not working | Wrong GPIO pin configuration (Arduino D-pins vs actual GPIO) | Changed to actual ESP32-C3 GPIO numbers |
+| 5 | Guru Meditation crash with animation | LVGL animation system conflicting with screen refresh | Disabled animation for stability |
+
+---
+
+### Current State
+
+- **Screen**: 284×76 landscape, black background, white text
+- **Tasks**: 5 example tasks with different priorities
+- **Navigation**: Rotary encoder with 2:1 ratio, task wrapping enabled
+- **UI**: Home Screen with header/content/footer layout
+- **Input**: Rotary encoder + button with full event detection
+- **Performance**: Reliable scrolling without crashes
+
+---
+
+### Known Issues
+
+- **Screen Animation Disabled**: LVGL animation system causes crashes when combined with screen refresh. Can be revisited later with a more sophisticated animation implementation.
+- **Debug Output**: Serial debugging enabled at 115200 baud - can be disabled for production
+- **Details Screen**: Implemented but not fully functional (description scrolling not implemented)
+
+---
+
+### Remaining Work
+
+- Implement smooth scroll animation without crashes
+- Complete Details Screen functionality
+- Add task completion (double-click)
+- Add description scrolling in Details Screen
+- Implement Bluetooth sync with mobile app
+- Remove serial debugging for production build
+
+---
+
+## v0_display — TFT_eSPI Migration (Previous)
 
 ### Overview
 
