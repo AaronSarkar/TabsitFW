@@ -45,7 +45,7 @@ Landscape
 
 Framework:
 
-LVGL 8.x
+LVGL 9.5
 
 Driver:
 
@@ -151,9 +151,7 @@ Layout
 ```text
 ┌────────────────────────────┐
 │ HIGH                 3/12  │
-│                            │
 │ Submit Firmware Spec       │
-│                            │
 │ Due Tomorrow               │
 └────────────────────────────┘
 ```
