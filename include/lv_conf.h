@@ -6,9 +6,19 @@
 #define LV_COLOR_DEPTH 16
 #define LV_COLOR_16_SWAP 0
 
+/* Enable complex drawing (needed for multi-stop gradients, rounded masks, etc.)
+   and allow up to 3 gradient stops for the blue->purple->pink Gemini accent. */
+#define LV_DRAW_COMPLEX 1
+#define LV_GRADIENT_MAX_STOPS 3
+
 #define LV_MEM_SIZE (64 * 1024U)
 #define LV_MEM_ADR 0
 #define LV_MEM_BUF_MAX_NUM 16
+
+/* Tell LVGL to use millis() as its time source so animations actually advance */
+#define LV_TICK_CUSTOM 1
+#define LV_TICK_CUSTOM_INCLUDE <Arduino.h>
+#define LV_TICK_CUSTOM_SYS_TIME_EXPR (millis())
 
 #define LV_DEF_REFR_PERIOD 30
 
@@ -87,7 +97,7 @@
 #define LV_USE_FS_WIN32 0
 #define LV_USE_FS_FATFS 0
 
-#define LV_USE_USER_DATA 0
+#define LV_USE_USER_DATA 1
 
 #define LV_USE_GROUP 1
 #define LV_GROUP_DEF_SET 1

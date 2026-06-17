@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "config/pins.h"
 #include "input/encoder.h"
+#include "diag.h"
 
 namespace {
   constexpr int QUEUE_SIZE = 16;
@@ -44,9 +45,13 @@ bool enqueueEvent(InputEvent event) {
   if (nextHead == queueTail) {
     // Queue full, drop oldest
     queueTail = (queueTail + 1) % QUEUE_SIZE;
+    DIAG1("EVT", "Queue full - dropped oldest event");
   }
   eventQueue[queueHead] = event;
   queueHead = nextHead;
+  DIAG2("EVT", "Enqueued event=%d  qHead=%d qTail=%d depth=%d",
+        event, queueHead, queueTail,
+        (queueHead - queueTail + QUEUE_SIZE) % QUEUE_SIZE);
   return true;
 }
 
@@ -57,6 +62,7 @@ bool getNextInputEvent(InputEvent* event) {
   }
   *event = eventQueue[queueTail];
   queueTail = (queueTail + 1) % QUEUE_SIZE;
+  DIAG2("EVT", "Dequeued event=%d  qHead=%d qTail=%d", *event, queueHead, queueTail);
   return true;
 }
 
@@ -79,20 +85,29 @@ void updateInputManager() {
   // Handle encoder rotation
   int encoderA = digitalRead(ENCODER_A);
   if (encoderA != encoderAPrev) {
+    DIAG2("ENC", "A edge: A=%d B=%d dt=%lums lock=%d",
+          encoderA, digitalRead(ENCODER_B),
+          currentTime - lastRotationTime, currentLock);
     if ((currentTime - lastRotationTime) >= ROTATION_DEBOUNCE_MS) {
       int encoderB = digitalRead(ENCODER_B);
       if (encoderB != encoderA) {
         if (currentLock == LOCK_NONE || currentLock == LOCK_ANIMATING) {
           enqueueEvent(ROTATE_NEXT);
-          Serial.println("Input: ROTATE_NEXT");
+          DIAG1("ENC", "ROTATE_NEXT  A=%d B=%d", encoderA, encoderB);
+        } else {
+          DIAG1("ENC", "ROTATE_NEXT blocked by lock=%d", currentLock);
         }
       } else {
         if (currentLock == LOCK_NONE || currentLock == LOCK_ANIMATING) {
           enqueueEvent(ROTATE_PREV);
-          Serial.println("Input: ROTATE_PREV");
+          DIAG1("ENC", "ROTATE_PREV  A=%d B=%d", encoderA, encoderB);
+        } else {
+          DIAG1("ENC", "ROTATE_PREV blocked by lock=%d", currentLock);
         }
       }
       lastRotationTime = currentTime;
+    } else {
+      DIAG2("ENC", "Debounced (dt=%lums < %dms)", currentTime - lastRotationTime, ROTATION_DEBOUNCE_MS);
     }
     encoderAPrev = encoderA;
   }
@@ -106,7 +121,7 @@ void updateInputManager() {
     buttonPressed = true;
     longPressTriggered = false;
     clickDebouncing = false;
-    Serial.println("Button pressed");
+    DIAG1("ENC", "Button pressed t=%lu", currentTime);
   } 
   else if (button == HIGH && buttonPrev == LOW) {
     // Button released
@@ -116,7 +131,7 @@ void updateInputManager() {
         if ((currentTime - lastClickTime) < DOUBLE_CLICK_TIMEOUT_MS && clickPending) {
           if (currentLock == LOCK_NONE) {
             enqueueEvent(DOUBLE_CLICK);
-            Serial.println("Input: DOUBLE_CLICK");
+            DIAG1("ENC", "DOUBLE_CLICK");
           }
           clickPending = false;
           clickDebouncing = false;
@@ -126,11 +141,11 @@ void updateInputManager() {
           lastClickTime = currentTime;
           clickDebounceTime = currentTime;
           clickDebouncing = true;
-          Serial.println("Potential click - debouncing");
+          DIAG2("ENC", "Click debouncing...");
         }
       }
       enqueueEvent(RELEASE);
-      Serial.println("Button released");
+      DIAG2("ENC", "Button released held=%lums", currentTime - buttonPressTime);
     }
     buttonPressed = false;
     longPressTriggered = false;
@@ -141,7 +156,9 @@ void updateInputManager() {
     if (clickPending) {
       if (currentLock == LOCK_NONE || currentLock == LOCK_SYNCING) {
         enqueueEvent(CLICK);
-        Serial.println("Input: CLICK");
+        DIAG1("ENC", "CLICK confirmed");
+      } else {
+        DIAG1("ENC", "CLICK blocked by lock=%d", currentLock);
       }
       clickPending = false;
     }
@@ -155,7 +172,7 @@ void updateInputManager() {
     clickDebouncing = false;
     if (currentLock == LOCK_NONE || currentLock == LOCK_ERROR) {
       enqueueEvent(LONG_PRESS);
-      Serial.println("Input: LONG_PRESS");
+      DIAG1("ENC", "LONG_PRESS");
     }
   }
 

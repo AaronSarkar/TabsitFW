@@ -4,6 +4,48 @@ All notable changes to this project.
 
 ---
 
+## v0_display — Gemini-Inspired UI Redesign + LVGL Tick Fix (latest)
+
+### Overview
+
+Resolved the long-standing Details-screen scrolling and screen-animation issues (single root cause: LVGL had no time source), then gave the UI a sleek, "liminal" Gemini-inspired redesign with a custom rounded font and a brand gradient accent.
+
+---
+
+### Issues Resolved
+
+| # | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| 1 | Details scrolling registered in software but never repainted; fade animations never advanced | LVGL was compiling with **default config** (`LV_TICK_CUSTOM = 0`) because the LVGL *library* build couldn't find `lv_conf.h` — the project include dir wasn't on the library's include path, so `#include "lv_conf.h"` silently fell back to defaults. With no tick source, the periodic refresh timer and animations never ran (only forced `lv_refr_now()` redraws worked). | Added `-I include` to `build_flags` so the LVGL library build resolves the project `lv_conf.h`; enabled `LV_TICK_CUSTOM` using `millis()`. Removed the duplicate `src/lv_conf.h` to make `include/lv_conf.h` the single source of truth. |
+| 2 | Editing `lv_conf.h` had no effect | LVGL objects were cached and the broken dependency tracking never recompiled them. | Confirmed config now appears in LVGL's dependency files after a clean build. |
+| 3 | Font generation build error (`lv_font_t has no member 'user_data'`) | Generated fonts set `.user_data` unconditionally. | Enabled `LV_USE_USER_DATA 1`. |
+
+---
+
+### Features / Changes
+
+- **Title fade animation**: Re-enabled the home-screen title cross-fade on task change (was previously disabled due to the tick issue). Tuned to 150 ms in / 150 ms out for a snappy feel.
+- **Custom rounded font**: Added **Quicksand** (OFL) converted to LVGL fonts — `font_quicksand_18` (SemiBold, titles) and `font_quicksand_13` (Medium, body). Tooling + regeneration steps in `tools/fonts/`.
+- **Gemini-inspired dark theme**: Single consistent dark background (`#16171A`) across all screens — removed the grey header/footer bars entirely.
+- **Priority dot**: Replaced the priority text label with a small colored dot (soft green/amber/red).
+- **Gradient accent**: Thin blue→purple→pink gradient line along the bottom edge (3-stop gradient via `LV_GRADIENT_MAX_STOPS 3` / `LV_DRAW_COMPLEX 1`).
+- **Details screen** restyled to match: consistent dark bg, rounded fonts, dropped the grey "Back" box, kept the now-working smooth scrolling.
+
+---
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `platformio.ini` | Added `-I include` (so the LVGL library build finds `lv_conf.h`); added `-DDIAG_LEVEL=2` |
+| `include/lv_conf.h` | Enabled `LV_TICK_CUSTOM` (millis), `LV_DRAW_COMPLEX`, `LV_GRADIENT_MAX_STOPS 3`, `LV_USE_USER_DATA` |
+| `src/lv_conf.h` | **Removed** — duplicate config, replaced by single `include/lv_conf.h` |
+| `src/ui/ui.cpp` | Redesigned Home + Details screens (dark theme, rounded fonts, priority dot, gradient accent); re-enabled + tuned title fade animation |
+| `src/ui/fonts/font_quicksand_18.c`, `font_quicksand_13.c` | **New** — generated LVGL fonts |
+| `tools/fonts/` | **New** — Quicksand TTFs + `lv_font_conv` setup + regeneration README |
+
+---
+
 ## v0_display — LVGL UI with Rotary Encoder Input
 
 ### Overview

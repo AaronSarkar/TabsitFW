@@ -1,23 +1,19 @@
 #include <Arduino.h>
 #include <TFT_eSPI.h>
-#include "display/lvgl_display.h"
+#include "display/display.h"
 #include "input/encoder.h"
 #include "ui/ui.h"
 #include "models/task.h"
-
-// Forward declaration
-void forceScreenRefresh();
+#include "diag.h"
 
 #define PIN_BL 21
 
 TFT_eSPI tft;
-unsigned long lastUpdateTime = 0;
-constexpr unsigned long UPDATE_INTERVAL = 16; // ~60 FPS
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("Initializing Task Display System...");
+  DIAG1("LOOP", "=== Tabsit booting ===");
 
   // Initialize backlight
   pinMode(PIN_BL, OUTPUT);
@@ -26,45 +22,48 @@ void setup() {
   // Initialize display
   tft.begin();
   tft.setRotation(1);
-  
-  int w = tft.width();
-  int h = tft.height();
-  Serial.printf("Display: %dx%d\n", w, h);
+  DIAG1("LOOP", "Display: %dx%d", tft.width(), tft.height());
 
   // Initialize LVGL with TFT_eSPI
-  initLvglDisplay(&tft);
-  Serial.println("LVGL initialized");
+  initDisplay(&tft);
 
   // Initialize input manager
   initInputManager();
-  Serial.println("Input manager initialized");
+  DIAG1("LOOP", "Input manager ready");
 
   // Initialize UI
   initUI();
-  Serial.println("UI initialized");
-  
-  // Force LVGL to refresh the screen immediately
-  Serial.println("Forcing initial LVGL refresh...");
-  forceScreenRefresh();
-  Serial.println("Initial refresh complete");
+  diagHeap("post-initUI");
 
-  // Print task information
-  Serial.printf("Total tasks: %d\n", getTaskCount());
-  for (int i = 0; i < getTaskCount(); i++) {
+  // Force LVGL to refresh the screen immediately
+  forceScreenRefresh();
+
+  // Print task list
+  int n = (int)getTaskCount();
+  DIAG1("LOOP", "Tasks loaded: %d", n);
+  for (int i = 0; i < n; i++) {
     const Task* task = getTask(i);
     if (task) {
-      Serial.printf("Task %d: %s (Priority: %d)\n", i, task->title.c_str(), task->priority);
+      DIAG1("LOOP", "  [%d] \"%s\" pri=%d", i, task->title.c_str(), task->priority);
     }
   }
 
-  Serial.println("Setup complete - System ready");
+  DIAG1("LOOP", "=== Setup complete ===");
 }
 
 void loop() {
-  unsigned long currentTime = millis();
+  // Heartbeat every 2 s so you can see the device is alive
+  static unsigned long lastHeartbeat = 0;
+  unsigned long now = millis();
+  if (now - lastHeartbeat >= 2000) {
+    lastHeartbeat = now;
+    DIAG1("LOOP", "alive t=%lums idx=%d state=%d animFlag=%d",
+          now, getCurrentTaskIndex(), (int)getUIState(), 0);
+    diagHeap("heartbeat");
+  }
 
-  // Update LVGL display more frequently
-  updateLvglDisplay();
+  // Update LVGL display
+  updateDisplay();
 
   // Update input manager
   updateInputManager();
@@ -73,7 +72,6 @@ void loop() {
   InputEvent event;
   while (getNextInputEvent(&event)) {
     if (event != INPUT_NONE) {
-      Serial.printf("Processing event: %d\n", event);
       handleInputEvent(event);
     }
   }
