@@ -8,4 +8,7 @@
 #define ENCODER_B 3 // D1
 #define ENCODER_A 4 // D2
 
+// Display backlight (active LOW)
+#define PIN_BL 21 // D6
+
 #endif

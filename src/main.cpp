@@ -1,12 +1,11 @@
 #include <Arduino.h>
 #include <TFT_eSPI.h>
+#include "config/pins.h"
 #include "display/display.h"
 #include "input/encoder.h"
 #include "ui/ui.h"
 #include "models/task.h"
 #include "diag.h"
-
-#define PIN_BL 21
 
 TFT_eSPI tft;
 
