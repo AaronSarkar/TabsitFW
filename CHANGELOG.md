@@ -4,7 +4,36 @@ All notable changes to this project.
 
 ---
 
-## v0_display — Frame-Rate & Serial Robustness (latest)
+## v0_display — Rotary Encoder Direction Fix (latest)
+
+### Overview
+
+Switched input from the KY-040 to a salvaged mouse encoder + button, then fixed the encoder reversing direction when scrolled quickly.
+
+---
+
+### Issues Resolved
+
+| # | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| 1 | Scrolling occasionally jumped backwards when the encoder was spun fast | The polled single-edge decoder reads channel B at each A-edge assuming only A moved. On a fast spin the loop skips a quadrature phase, so A **and** B flip between two polls; `encoderB != encoderA` then evaluates to the opposite direction and emits a backwards step. | On an A-edge, also check whether B changed since the last poll. If both changed (a skipped phase), the direction is ambiguous, so the edge is ignored instead of emitting a guessed/backwards step. Normal-speed behavior (and the 2:1 ratio) is unchanged. |
+
+---
+
+### Changes
+
+- **Ambiguous-transition guard** (`src/input/encoder.cpp`): track `encoderBPrev`; skip the A-edge when `encoderB != encoderBPrev`. Single-variable addition; per-A-edge event cadence, debounce, button handling, and locks are all untouched.
+
+---
+
+### Known Issues / Notes
+
+- Hardware: the encoder's A/B lines were observed moving **in phase** (only `00`/`11` states, never `01`/`10`), indicating an A↔B short / wiring fault on the salvaged encoder. The firmware decoder is correct; clean quadrature wiring is still needed for fully reliable scrolling.
+- Sensitivity: currently ~4 detents per task step (acceptable for now; not addressed).
+
+---
+
+## v0_display — Frame-Rate & Serial Robustness
 
 ### Overview
 

@@ -18,6 +18,7 @@ namespace {
 
   // Encoder state
   int encoderAPrev = HIGH;
+  int encoderBPrev = HIGH;
   unsigned long lastRotationTime = 0;
 
   // Button state
@@ -37,6 +38,7 @@ void initInputManager() {
   pinMode(BUTTON, INPUT_PULLUP);
   
   encoderAPrev = digitalRead(ENCODER_A);
+  encoderBPrev = digitalRead(ENCODER_B);
   buttonPrev = digitalRead(BUTTON);
 }
 
@@ -84,12 +86,16 @@ void updateInputManager() {
 
   // Handle encoder rotation
   int encoderA = digitalRead(ENCODER_A);
+  int encoderB = digitalRead(ENCODER_B);
   if (encoderA != encoderAPrev) {
     DIAG2("ENC", "A edge: A=%d B=%d dt=%lums lock=%d",
-          encoderA, digitalRead(ENCODER_B),
+          encoderA, encoderB,
           currentTime - lastRotationTime, currentLock);
-    if ((currentTime - lastRotationTime) >= ROTATION_DEBOUNCE_MS) {
-      int encoderB = digitalRead(ENCODER_B);
+    // If B also changed since the last poll, a quadrature phase was skipped
+    // during a fast spin; the direction is ambiguous, so ignore this edge
+    // rather than emit a (likely backwards) step.
+    bool phaseSkipped = (encoderB != encoderBPrev);
+    if (!phaseSkipped && (currentTime - lastRotationTime) >= ROTATION_DEBOUNCE_MS) {
       if (encoderB != encoderA) {
         if (currentLock == LOCK_NONE || currentLock == LOCK_ANIMATING) {
           enqueueEvent(ROTATE_NEXT);
@@ -111,6 +117,7 @@ void updateInputManager() {
     }
     encoderAPrev = encoderA;
   }
+  encoderBPrev = encoderB;
 
   // Handle button
   int button = digitalRead(BUTTON);
