@@ -4,7 +4,34 @@ All notable changes to this project.
 
 ---
 
-## v0_display — Gemini-Inspired UI Redesign + LVGL Tick Fix (latest)
+## v0_display — Frame-Rate & Serial Robustness (latest)
+
+### Overview
+
+Improved rendering frame rate (especially during scrolling/animation) and made the device responsive on a cold power-up even with no serial monitor attached.
+
+---
+
+### Issues Resolved
+
+| # | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| 1 | After depower/repower, scrolling became extremely delayed/broken (but was fine right after flashing/monitoring) | `Serial` is USB CDC; with verbose `DIAG_LEVEL=2` logging, on a cold boot with no host draining the port the CDC TX buffer fills and every `Serial.printf()` blocks, stalling the UI loop | `Serial.setTxTimeoutMs(0)` in `setup()` — serial writes drop instead of blocking when nothing is listening |
+| 2 | Choppy scrolling / low frame rate | SPI clock was 4 MHz (inherited from the old custom driver); a full-screen flush (21,584 px x 16-bit) took ~86 ms (~11 FPS) just for the transfer | Raised `SPI_FREQUENCY` to 40 MHz (~9 ms/frame); raised LVGL refresh rate; trimmed per-frame overhead |
+
+---
+
+### Changes
+
+- **SPI clock 4 MHz → 40 MHz** (`include/tft_setup.h`): the dominant frame-rate fix (~11 FPS → 100+ FPS transfer ceiling). Comment notes stepping down to 27/20 MHz if signal glitches appear.
+- **LVGL refresh period 30 ms → 16 ms** (`include/lv_conf.h`): lifts the animation/scroll FPS cap from ~33 to ~60.
+- **Removed per-flush serial logging** in `disp_flush` (`src/display/display.cpp`): ran every frame and throttled the achievable rate.
+- **Main loop `delay(5) → delay(2)`** (`src/main.cpp`): services `lv_timer_handler()` finely enough to hit ~60 FPS.
+- **Non-blocking serial** (`src/main.cpp`): `Serial.setTxTimeoutMs(0)`.
+
+---
+
+## v0_display — Gemini-Inspired UI Redesign + LVGL Tick Fix
 
 ### Overview
 

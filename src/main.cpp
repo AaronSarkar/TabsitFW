@@ -12,6 +12,12 @@ TFT_eSPI tft;
 
 void setup() {
   Serial.begin(115200);
+  // USB-CDC serial: never block the main loop waiting for a host to read.
+  // Without this, on a cold power-up with no serial monitor attached the TX
+  // buffer fills and every Serial.printf() blocks, stalling the UI loop and
+  // making scrolling extremely delayed/broken. A 0ms timeout drops output
+  // instead of blocking when nothing is draining the port.
+  Serial.setTxTimeoutMs(0);
   delay(1000);
   DIAG1("LOOP", "=== Tabsit booting ===");
 
@@ -76,6 +82,8 @@ void loop() {
     }
   }
 
-  // Small delay to prevent CPU overload
-  delay(5);
+  // Small delay to prevent CPU overload. Keep it short so lv_timer_handler()
+  // is serviced finely enough to hit the ~60 FPS refresh period during
+  // scrolling/animation.
+  delay(2);
 }

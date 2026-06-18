@@ -22,7 +22,12 @@
 #define ROWSTART 18
 #define TFT_WIDTH    76
 #define TFT_HEIGHT   284
-#define SPI_FREQUENCY   4000000
+// ST7789 write clock. 4 MHz was inherited from the old custom driver and is
+// the main frame-rate bottleneck: a full-screen flush (21,584 px x 16-bit) took
+// ~86 ms (~11 FPS) just for the SPI transfer. 40 MHz cuts that to ~9 ms.
+// If you see visual glitches/noise (long jumper wires, marginal signal), step
+// this down to 27000000 or 20000000.
+#define SPI_FREQUENCY   40000000
 #define SUPPORT_TRANSACTIONS
 
 #define CGRAM_OFFSET

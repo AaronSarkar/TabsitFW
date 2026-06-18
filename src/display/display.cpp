@@ -12,11 +12,8 @@ namespace {
 }
 
 static void disp_flush(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) {
-  static uint32_t flush_count = 0;
-  flush_count++;
-  
   if (!tft_instance) {
-    DIAG1("DISP", "Flush #%u: TFT null!", flush_count);
+    DIAG1("DISP", "Flush: TFT null!");
     lv_disp_flush_ready(disp);
     return;
   }
@@ -24,8 +21,8 @@ static void disp_flush(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* c
   uint32_t w = (area->x2 - area->x1 + 1);
   uint32_t h = (area->y2 - area->y1 + 1);
 
-  DIAG2("DISP", "Flush #%u: area(%d,%d,%d,%d) %dx%d px=%u",
-        flush_count, area->x1, area->y1, area->x2, area->y2, w, h, w * h);
+  // NOTE: no per-flush logging here — it runs every frame and throttles the
+  // achievable frame rate during scrolling/animation.
 
   tft_instance->startWrite();
   tft_instance->setAddrWindow(area->x1, area->y1, w, h);

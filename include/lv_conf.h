@@ -20,7 +20,10 @@
 #define LV_TICK_CUSTOM_INCLUDE <Arduino.h>
 #define LV_TICK_CUSTOM_SYS_TIME_EXPR (millis())
 
-#define LV_DEF_REFR_PERIOD 30
+/* Display refresh period (ms). Caps animation/scroll FPS at 1000/period.
+   16ms => ~60 FPS for smooth scrolling and fades (feasible now that the
+   SPI clock is high enough to push a full frame in ~9ms). */
+#define LV_DEF_REFR_PERIOD 16
 
 #define LV_INDEV_DEF_READ_PERIOD 30
 #define LV_INDEV_SCROLL_THROW 10
