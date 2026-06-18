@@ -62,6 +62,41 @@ static void titleFadeOutReadyCb(lv_anim_t* a);
 static void titleFadeInReadyCb(lv_anim_t* a);
 static void cancelAnimation();
 static void startTitleFadeAnimation();
+static void applyHomeTaskContent();
+
+// Returns true every ENCODER_RATIO-th call, implementing detent skipping.
+static bool encoderTick() {
+  rotationCount++;
+  if (rotationCount >= ENCODER_RATIO) {
+    rotationCount = 0;
+    return true;
+  }
+  return false;
+}
+
+static void resetObjStyle(lv_obj_t* obj) {
+  lv_obj_set_style_border_width(obj, 0, 0);
+  lv_obj_set_style_radius(obj, 0, 0);
+  lv_obj_set_style_pad_all(obj, 0, 0);
+  lv_obj_set_style_shadow_width(obj, 0, 0);
+  lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
+  lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
+}
+
+static void startFadeAnim(void* var, int32_t from, int32_t to,
+                          lv_anim_exec_xcb_t exec_cb,
+                          lv_anim_ready_cb_t ready_cb,
+                          lv_anim_path_cb_t path_cb) {
+  lv_anim_t a;
+  lv_anim_init(&a);
+  lv_anim_set_var(&a, var);
+  lv_anim_set_values(&a, from, to);
+  lv_anim_set_time(&a, 150);
+  lv_anim_set_exec_cb(&a, exec_cb);
+  lv_anim_set_ready_cb(&a, ready_cb);
+  lv_anim_set_path_cb(&a, path_cb);
+  lv_anim_start(&a);
+}
 
 static void initGeminiGradient() {
   lv_memset_00(&gemini_grad, sizeof(gemini_grad));
@@ -76,14 +111,9 @@ static void initGeminiGradient() {
 static lv_obj_t* createAccentBar(lv_obj_t* parent) {
   lv_obj_t* bar = lv_obj_create(parent);
   lv_obj_set_size(bar, 284, 3);
-  lv_obj_set_style_border_width(bar, 0, 0);
-  lv_obj_set_style_radius(bar, 0, 0);
-  lv_obj_set_style_pad_all(bar, 0, 0);
-  lv_obj_set_style_shadow_width(bar, 0, 0);
-  lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
+  resetObjStyle(bar);
   lv_obj_set_style_bg_color(bar, COL_GRAD_A, 0);
   lv_obj_set_style_bg_grad(bar, &gemini_grad, 0);
-  lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_align(bar, LV_ALIGN_BOTTOM_MID, 0, 0);
   return bar;
 }
@@ -115,11 +145,7 @@ static const char* getDueDateString(uint64_t dueDate) {
 static void styleScreenRoot(lv_obj_t* scr) {
   lv_obj_set_size(scr, 284, 76);
   lv_obj_set_style_bg_color(scr, COL_BG, 0);
-  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(scr, 0, 0);
-  lv_obj_set_style_radius(scr, 0, 0);
-  lv_obj_set_style_pad_all(scr, 0, 0);
-  lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+  resetObjStyle(scr);
 }
 
 static void createHomeScreen() {
@@ -133,12 +159,8 @@ static void createHomeScreen() {
   // Priority dot (top-left) — small colored circle, color set per task.
   home_priority_dot = lv_obj_create(screen_home);
   lv_obj_set_size(home_priority_dot, 9, 9);
+  resetObjStyle(home_priority_dot);
   lv_obj_set_style_radius(home_priority_dot, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_border_width(home_priority_dot, 0, 0);
-  lv_obj_set_style_shadow_width(home_priority_dot, 0, 0);
-  lv_obj_set_style_pad_all(home_priority_dot, 0, 0);
-  lv_obj_set_style_bg_opa(home_priority_dot, LV_OPA_COVER, 0);
-  lv_obj_clear_flag(home_priority_dot, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_align(home_priority_dot, LV_ALIGN_TOP_LEFT, 16, 12);
 
   // Position counter (top-right), muted.
@@ -222,43 +244,11 @@ static void titleFadeInCallback(void* var, int32_t v) {
 static void titleFadeOutReadyCb(lv_anim_t* a) {
   DIAG1("ANIM", "FadeOut READY -> updating content, idx=%d animFlag=%d",
         currentTaskIndex, (int)animationInProgress);
-  
-  // Update content with new task data
-  const Task* task = getTask(currentTaskIndex);
-  if (!task) {
-    if (home_title_label) lv_label_set_text(home_title_label, "No Tasks");
-    if (home_priority_dot) lv_obj_add_flag(home_priority_dot, LV_OBJ_FLAG_HIDDEN);
-    if (home_position_label) lv_label_set_text(home_position_label, "");
-    if (home_due_label) lv_label_set_text(home_due_label, "Open App to Sync");
-  } else {
-    // Priority dot color
-    if (home_priority_dot) {
-      lv_obj_clear_flag(home_priority_dot, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_set_style_bg_color(home_priority_dot, getPriorityColor(task->priority), 0);
-    }
-    
-    char posStr[16];
-    snprintf(posStr, sizeof(posStr), "%d / %d", currentTaskIndex + 1, totalTasks);
-    if (home_position_label) lv_label_set_text(home_position_label, posStr);
-    
-    // Update content
-    if (home_title_label) lv_label_set_text(home_title_label, task->title.c_str());
-    
-    // Update footer
-    if (home_due_label) lv_label_set_text(home_due_label, getDueDateString(task->dueDate));
-  }
-  
-  // Start fade in animation.
-  // lv_anim_start() copies the struct internally, so a stack-local is safe here.
-  lv_anim_t fadeInAnim;
-  lv_anim_init(&fadeInAnim);
-  lv_anim_set_var(&fadeInAnim, home_title_label);
-  lv_anim_set_values(&fadeInAnim, LV_OPA_0, LV_OPA_COVER);
-  lv_anim_set_time(&fadeInAnim, 150);
-  lv_anim_set_exec_cb(&fadeInAnim, titleFadeInCallback);
-  lv_anim_set_ready_cb(&fadeInAnim, titleFadeInReadyCb);
-  lv_anim_set_path_cb(&fadeInAnim, lv_anim_path_ease_out);
-  lv_anim_start(&fadeInAnim);
+
+  applyHomeTaskContent();
+
+  startFadeAnim(home_title_label, LV_OPA_0, LV_OPA_COVER,
+                titleFadeInCallback, titleFadeInReadyCb, lv_anim_path_ease_out);
   DIAG1("ANIM", "FadeIn started");
 }
 
@@ -285,22 +275,40 @@ static void startTitleFadeAnimation() {
     DIAG1("ANIM", "Already in progress - skip (idx=%d)", currentTaskIndex);
     return;
   }
-  
+
   animationInProgress = true;
   DIAG1("ANIM", "FadeOut starting idx=%d", currentTaskIndex);
   diagHeap("pre-anim");
-  
-  // lv_anim_start() copies the struct internally, so a stack-local is safe here.
-  lv_anim_t fadeOutAnim;
-  lv_anim_init(&fadeOutAnim);
-  lv_anim_set_var(&fadeOutAnim, home_title_label);
-  lv_anim_set_values(&fadeOutAnim, LV_OPA_COVER, LV_OPA_0);
-  lv_anim_set_time(&fadeOutAnim, 150);
-  lv_anim_set_exec_cb(&fadeOutAnim, titleFadeOutCallback);
-  lv_anim_set_ready_cb(&fadeOutAnim, titleFadeOutReadyCb);
-  lv_anim_set_path_cb(&fadeOutAnim, lv_anim_path_ease_in);
-  lv_anim_start(&fadeOutAnim);
+
+  startFadeAnim(home_title_label, LV_OPA_COVER, LV_OPA_0,
+                titleFadeOutCallback, titleFadeOutReadyCb, lv_anim_path_ease_in);
   DIAG1("ANIM", "FadeOut started");
+}
+
+// Populate the home screen labels/dot from the current task.
+// Safe to call from both animation callbacks and direct updates.
+static void applyHomeTaskContent() {
+  const Task* task = getTask(currentTaskIndex);
+  if (!task) {
+    DIAG1("UI", "applyHomeTaskContent: no task at idx=%d", currentTaskIndex);
+    if (home_title_label)    lv_label_set_text(home_title_label, "No Tasks");
+    if (home_priority_dot)   lv_obj_add_flag(home_priority_dot, LV_OBJ_FLAG_HIDDEN);
+    if (home_position_label) lv_label_set_text(home_position_label, "");
+    if (home_due_label)      lv_label_set_text(home_due_label, "Open App to Sync");
+    return;
+  }
+
+  DIAG2("UI", "applyHomeTaskContent idx=%d title=\"%s\"", currentTaskIndex, task->title.c_str());
+  if (home_priority_dot) {
+    lv_obj_clear_flag(home_priority_dot, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_style_bg_color(home_priority_dot, getPriorityColor(task->priority), 0);
+  }
+
+  char posStr[16];
+  snprintf(posStr, sizeof(posStr), "%d / %d", currentTaskIndex + 1, totalTasks);
+  if (home_position_label) lv_label_set_text(home_position_label, posStr);
+  if (home_title_label)    lv_label_set_text(home_title_label, task->title.c_str());
+  if (home_due_label)      lv_label_set_text(home_due_label, getDueDateString(task->dueDate));
 }
 
 static void updateHomeScreen() {
@@ -308,34 +316,7 @@ static void updateHomeScreen() {
   // titleFadeOutReadyCb (mid-animation) and must not disturb the animation
   // lifecycle. Callers that need to cancel first (e.g. setUIState) do so
   // themselves before calling this.
-  const Task* task = getTask(currentTaskIndex);
-  if (!task) {
-    DIAG1("UI", "updateHomeScreen: no task at idx=%d", currentTaskIndex);
-    lv_label_set_text(home_title_label, "No Tasks");
-    lv_obj_add_flag(home_priority_dot, LV_OBJ_FLAG_HIDDEN);
-    lv_label_set_text(home_position_label, "");
-    lv_label_set_text(home_due_label, "Open App to Sync");
-    lv_obj_invalidate(screen_home);
-    return;
-  }
-  
-  DIAG2("UI", "updateHomeScreen idx=%d title=\"%s\"", currentTaskIndex, task->title.c_str());
-  
-  // Priority dot color
-  lv_obj_clear_flag(home_priority_dot, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_set_style_bg_color(home_priority_dot, getPriorityColor(task->priority), 0);
-  
-  char posStr[16];
-  snprintf(posStr, sizeof(posStr), "%d / %d", currentTaskIndex + 1, totalTasks);
-  lv_label_set_text(home_position_label, posStr);
-  
-  // Update content
-  lv_label_set_text(home_title_label, task->title.c_str());
-  
-  // Update footer
-  lv_label_set_text(home_due_label, getDueDateString(task->dueDate));
-  
-  // Mark entire screen as dirty
+  applyHomeTaskContent();
   lv_obj_invalidate(screen_home);
 }
 
@@ -402,58 +383,30 @@ void handleInputEvent(InputEvent event) {
   if (currentState == UI_HOME) {
     switch (event) {
       case ROTATE_NEXT:
-        rotationCount++;
-        if (rotationCount >= ENCODER_RATIO) {
-          rotationCount = 0;
-          
-          // Update task index with wrapping
-          int prevIdx = currentTaskIndex;
-          currentTaskIndex++;
-          if (currentTaskIndex >= totalTasks) {
-            currentTaskIndex = 0; // Wrap to first task
-          }
-          DIAG1("UI", "HOME ROTATE_NEXT: idx %d -> %d animFlag=%d",
-                prevIdx, currentTaskIndex, (int)animationInProgress);
-          
-          // Only start animation if one isn't already running.
-          // If an animation IS running, currentTaskIndex has already been updated
-          // above. titleFadeOutReadyCb reads currentTaskIndex when it fires, so
-          // the next content update will show the correct task automatically.
-          // DO NOT touch LVGL labels here — the animation is actively modifying
-          // them and calling lv_label_set_text mid-animation corrupts object state.
-          if (!animationInProgress) {
-            startTitleFadeAnimation();
-          } else {
-            DIAG1("UI", "Anim in progress - queued idx=%d (will show at fade-out ready)", currentTaskIndex);
-          }
+      case ROTATE_PREV: {
+        if (!encoderTick()) {
+          DIAG2("UI", "ROTATE skipped (rotCount=%d/%d)", rotationCount, ENCODER_RATIO);
+          break;
+        }
+        int prevIdx = currentTaskIndex;
+        if (event == ROTATE_NEXT) {
+          currentTaskIndex = (currentTaskIndex + 1) % totalTasks;
         } else {
-          DIAG2("UI", "ROTATE_NEXT skipped (rotCount=%d/%d)", rotationCount, ENCODER_RATIO);
+          currentTaskIndex = (currentTaskIndex - 1 + totalTasks) % totalTasks;
+        }
+        DIAG1("UI", "HOME %s: idx %d -> %d animFlag=%d",
+              event == ROTATE_NEXT ? "ROTATE_NEXT" : "ROTATE_PREV",
+              prevIdx, currentTaskIndex, (int)animationInProgress);
+        // Only start animation if one isn't already running.
+        // titleFadeOutReadyCb reads currentTaskIndex when it fires, so
+        // the next content update will show the correct task automatically.
+        if (!animationInProgress) {
+          startTitleFadeAnimation();
+        } else {
+          DIAG1("UI", "Anim in progress - queued idx=%d (will show at fade-out ready)", currentTaskIndex);
         }
         break;
-      case ROTATE_PREV:
-        rotationCount++;
-        if (rotationCount >= ENCODER_RATIO) {
-          rotationCount = 0;
-          
-          // Update task index with wrapping
-          int prevIdxP = currentTaskIndex;
-          currentTaskIndex--;
-          if (currentTaskIndex < 0) {
-            currentTaskIndex = totalTasks - 1; // Wrap to last task
-          }
-          DIAG1("UI", "HOME ROTATE_PREV: idx %d -> %d animFlag=%d",
-                prevIdxP, currentTaskIndex, (int)animationInProgress);
-          
-          // Same safe pattern as ROTATE_NEXT above.
-          if (!animationInProgress) {
-            startTitleFadeAnimation();
-          } else {
-            DIAG1("UI", "Anim in progress - queued idx=%d (will show at fade-out ready)", currentTaskIndex);
-          }
-        } else {
-          DIAG2("UI", "ROTATE_PREV skipped (rotCount=%d/%d)", rotationCount, ENCODER_RATIO);
-        }
-        break;
+      }
       case CLICK:
         DIAG1("UI", "HOME CLICK -> details");
         setUIState(UI_DETAILS);
@@ -478,23 +431,13 @@ void handleInputEvent(InputEvent event) {
         setUIState(UI_HOME);
         break;
       case ROTATE_NEXT:
-        rotationCount++;
-        if (rotationCount >= ENCODER_RATIO) {
-          rotationCount = 0;
-          DIAG1("UI", "DETAILS ROTATE_NEXT -> scrollDown");
-          scrollDescription(1);
-        } else {
-          DIAG2("UI", "ROTATE_NEXT skipped (rotCount=%d/%d)", rotationCount, ENCODER_RATIO);
-        }
-        break;
       case ROTATE_PREV:
-        rotationCount++;
-        if (rotationCount >= ENCODER_RATIO) {
-          rotationCount = 0;
-          DIAG1("UI", "DETAILS ROTATE_PREV -> scrollUp");
-          scrollDescription(-1);
+        if (encoderTick()) {
+          int dir = (event == ROTATE_NEXT) ? 1 : -1;
+          DIAG1("UI", "DETAILS %s -> scroll", dir > 0 ? "ROTATE_NEXT" : "ROTATE_PREV");
+          scrollDescription(dir);
         } else {
-          DIAG2("UI", "ROTATE_PREV skipped (rotCount=%d/%d)", rotationCount, ENCODER_RATIO);
+          DIAG2("UI", "ROTATE skipped (rotCount=%d/%d)", rotationCount, ENCODER_RATIO);
         }
         break;
       default:
@@ -513,12 +456,10 @@ void setUIState(UIState state) {
     lv_scr_load(screen_home);
     DIAG1("UI", "Home screen loaded");
     updateHomeScreen();
-    lv_refr_now(NULL); // Force immediate redraw
   } else if (state == UI_DETAILS) {
     lv_scr_load(screen_details);
     DIAG1("UI", "Details screen loaded");
     updateDetailsScreen();
-    lv_refr_now(NULL); // Force immediate redraw
   }
   forceScreenRefresh();
 }
