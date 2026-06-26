@@ -9,6 +9,14 @@ namespace {
   lv_color_t buf1[284 * 76];  // Full screen buffer
   lv_disp_drv_t disp_drv;
   lv_indev_drv_t indev_drv;
+
+  // CGRAM offsets to center the 76x284 visible area in the 240x320 physical
+  // panel, for rotation 1 (landscape). These used to be patched into TFT_eSPI's
+  // ST7789_Rotation.h, but files under .pio/libdeps are wiped whenever
+  // PlatformIO re-downloads the library, which silently broke the display.
+  // Applying the offset here in our own flush keeps the fix permanent.
+  constexpr uint16_t DISP_COLSTART = 18;
+  constexpr uint16_t DISP_ROWSTART = 82;
 }
 
 static void disp_flush(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) {
@@ -25,7 +33,7 @@ static void disp_flush(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* c
   // achievable frame rate during scrolling/animation.
 
   tft_instance->startWrite();
-  tft_instance->setAddrWindow(area->x1, area->y1, w, h);
+  tft_instance->setAddrWindow(area->x1 + DISP_COLSTART, area->y1 + DISP_ROWSTART, w, h);
   tft_instance->pushColors((uint16_t*)&color_p->full, w * h, true);
   tft_instance->endWrite();
 

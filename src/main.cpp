@@ -28,6 +28,10 @@ void setup() {
   // Initialize display
   tft.begin();
   tft.setRotation(1);
+  // The stock TFT_eSPI ST7789 init enables colour inversion (INVON). Our panel
+  // was calibrated with inversion OFF, so force it here. (This used to live in
+  // the library's patched ST7789_Init.h, which gets wiped on library reinstall.)
+  tft.invertDisplay(false);
   DIAG1("LOOP", "Display: %dx%d", tft.width(), tft.height());
 
   // Initialize LVGL with TFT_eSPI

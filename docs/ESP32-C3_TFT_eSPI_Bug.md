@@ -67,45 +67,64 @@ If your wiring uses D4, set `TFT_DC=6` (not 4).
 An ST7789 with 284×76 landscape has a 76×284 native (portrait) GRAM.
 To center the visible area in a 240×320 GRAM, offsets are required.
 
-### Fix: Add resolution case to `ST7789_Rotation.h`
+> **IMPORTANT — do NOT patch the library for this.**
+> A previous version of this guide patched `_init_width == 76` branches into
+> `.pio/libdeps/.../TFT_eSPI/TFT_Drivers/ST7789_Rotation.h`. Files under
+> `.pio/libdeps/` are **wiped whenever PlatformIO re-downloads the library**
+> (clean build, fresh checkout, version bump), which silently breaks the
+> display (image shifted, looks "glitched"). The fix now lives in our own
+> tracked source so it survives library reinstalls.
 
-Add `_init_width == 76` branches in all four rotation cases with these offsets
-(matched to the working custom driver):
+### Fix: Apply the offset in our own `disp_flush()`
 
+We use rotation 1 (landscape). The required offsets for this panel are
+`colstart=18, rowstart=82`. Adding these to the address window in our flush
+callback is mathematically identical to having `colstart`/`rowstart` set
+inside the library:
+
+```cpp
+// src/display/display.cpp
+constexpr uint16_t DISP_COLSTART = 18;
+constexpr uint16_t DISP_ROWSTART = 82;
+...
+tft_instance->setAddrWindow(area->x1 + DISP_COLSTART,
+                            area->y1 + DISP_ROWSTART, w, h);
+```
+
+For reference, the offsets for the other rotations are:
 ```
 Rotation 0 (portrait):       colstart=82, rowstart=18
-Rotation 1 (landscape 90°):  colstart=18, rowstart=82
 Rotation 2 (inverted port):  colstart=0,  rowstart=80
 Rotation 3 (inverted land):  colstart=0,  rowstart=0
 ```
 
-The file is at:
-```
-.pio/libdeps/seeed_xiao_esp32c3/TFT_eSPI/TFT_Drivers/ST7789_Rotation.h
-```
-
-Also define `CGRAM_OFFSET` in build flags:
-```ini
--D CGRAM_OFFSET=1
-```
-
 ---
 
-## 4. Display Initialisation Sequence
+## 4. Display Colour Inversion
 
 The default TFT_eSPI init for ST7789 sends `fillScreen(TFT_RED)` over a
 240×320 window (76 800 pixels), which can cause brownouts on the XIAO.
 
-### Fix: Replace init sequence in `ST7789_Init.h`
+> **IMPORTANT — do NOT patch `ST7789_Init.h`.** As with the offsets above, any
+> edits to `.pio/libdeps/.../TFT_eSPI/TFT_Drivers/ST7789_Init.h` are wiped on
+> library reinstall.
 
-Replace the first init branch with the working minimal sequence from the
-custom driver (no `fillScreen`, correct register values):
+### Fix: Force inversion off from our own code
 
+After `tft.begin()` / `tft.setRotation(1)`, override the library default:
+
+```cpp
+// src/main.cpp
+tft.begin();
+tft.setRotation(1);
+tft.invertDisplay(false);   // stock init leaves INVON on
 ```
-.pio/libdeps/seeed_xiao_esp32c3/TFT_eSPI/TFT_Drivers/ST7789_Init.h
-```
 
-Commands used (matching the custom driver):
+If colours ever look inverted (negative-looking), flip this to
+`tft.invertDisplay(true)`.
+
+<!-- Historical reference: the calibrated init sequence from the old custom
+driver (no longer applied via library patch; kept for documentation only).
 ```
 SWRESET  → delay 150
 SLPOUT   → delay 150
@@ -121,45 +140,79 @@ FRCTR2   = 0x0F
 PWCTRL1  = 0xA4 0xA1
 PVGAMCTRL gamma table
 NVGAMCTRL gamma table
-INVOFF
+INVOFF  (this is what tft.invertDisplay(false) reproduces at runtime)
 NORON    → delay 10
 DISPON   → delay 150
 ```
+-->
 
 ---
 
-## 5. Complete `platformio.ini`
+## 5. Project configuration
+
+The TFT_eSPI configuration is **not** kept as inline `-D` build flags. Instead
+it lives in `include/tft_setup.h`, which is force-included into every
+translation unit (including the TFT_eSPI library build) via the `-include`
+flag. This keeps the pin map / driver settings in one readable place.
+
+### `platformio.ini`
 
 ```ini
 [env:seeed_xiao_esp32c3]
-platform = espressif32@6.6.0
+platform = espressif32@6.6.0     ; pinned: Arduino 2.0.14 (see Section 1)
 board = seeed_xiao_esp32c3
 framework = arduino
-
+upload_port = COM7
+monitor_port = COM7
+upload_speed = 115200
+monitor_speed = 115200
+monitor_filters = esp32_exception_decoder, colorize
 lib_deps =
-    bodmer/TFT_eSPI @ ^2.5.43
-
+    bodmer/TFT_eSPI @ ^2.5
+    lvgl/lvgl@^8.3
 build_flags =
-    -D USER_SETUP_LOADED=1
-    -D ST7789_DRIVER=1
-    -D CGRAM_OFFSET=1
-    -D TFT_WIDTH=76
-    -D TFT_HEIGHT=284
-    -D TFT_RGB_ORDER=TFT_BGR
-
-    -D TFT_MISO=9
-    -D TFT_MOSI=10
-    -D TFT_SCLK=8
-    -D TFT_CS=20
-    -D TFT_DC=6
-    -D TFT_RST=5
-
-    -D LOAD_FONT2=1
-    -D LOAD_FONT4=1
-    -D SPI_FREQUENCY=4000000
+    -include include/tft_setup.h   ; force-include the TFT_eSPI config header
+    -DLV_CONF_INCLUDE_SIMPLE
+    -I include                     ; so the LVGL lib build can find lv_conf.h
+    -DDIAG_LEVEL=2
+build_src_filter = +<*> -<display/lvgl_display.cpp>
 ```
 
+### `include/tft_setup.h` (the actual TFT_eSPI config)
+
+```cpp
+#define ST7789_DRIVER
+#define TFT_CS      20     // D7
+#define TFT_DC      6      // D4
+#define TFT_RST     5      // D3
+#define TFT_MOSI    10     // D10
+#define TFT_SCLK    8      // D8
+#define TFT_BL      21     // D6
+#define TFT_MISO    9      // D9 (unused, satisfies SPI)
+#define TFT_BACKLIGHT_ON 0 // Active LOW
+
+#define TFT_WIDTH    76
+#define TFT_HEIGHT   284
+#define CGRAM_OFFSET       // declared, but offsets are applied in disp_flush (Section 3)
+
+#define SPI_FREQUENCY   40000000  // drop to 27000000 if you see signal noise
+#define SUPPORT_TRANSACTIONS
+
+#define LOAD_FONT2
+#define LOAD_FONT4
+#define USER_SETUP_LOADED
+```
+
+> Note: the `COLSTART`/`ROWSTART` macros that used to live here are no longer
+> used by the library (it was reset to stock). The real offsets are applied in
+> `src/display/display.cpp` — see Section 3.
+
 ## 6. Minimal `main.cpp`
+
+This is a bare sanity-check sketch that draws **directly** with TFT_eSPI (it
+does not go through LVGL's `disp_flush`), so the CGRAM offset from Section 3 is
+not applied here — expect the test graphics to be shifted on the panel. The
+real app applies the offset in `disp_flush`.
 
 ```cpp
 #include <Arduino.h>
@@ -178,6 +231,7 @@ void setup() {
 
     tft.init();
     tft.setRotation(1);          // Landscape 284 x 76
+    tft.invertDisplay(false);    // stock init leaves INVON on (see Section 4)
 
     tft.fillScreen(TFT_NAVY);
     tft.drawRect(0, 0, tft.width(), tft.height(), TFT_YELLOW);
